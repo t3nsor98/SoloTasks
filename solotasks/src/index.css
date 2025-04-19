@@ -1,1 +1,28 @@
+@import url("https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
+
+@theme {
+  /* Custom Colors */
+  --color-system-purple-100: #e0d4ff;
+  --color-system-purple-200: #c2a9ff;
+  --color-system-purple-300: #a37eff;
+  --color-system-purple-400: #8553ff;
+  --color-system-purple-500: #6728ff;
+  --color-system-purple-600: #5220cc;
+  --color-system-purple-700: #3d1899;
+  --color-system-purple-800: #291066;
+  --color-system-purple-900: #140833;
+
+  --color-system-black: #0a0a0a;
+  --color-system-gray: #2a2a2a;
+
+  /* Custom Font */
+  --font-system: "Rajdhani", sans-serif;
+
+  /* Custom Box Shadow */
+  --shadow-system: 0 0 10px rgba(103, 40, 255, 0.5);
+}
+
+body {
+  font-family: var(--font-system);
+}
