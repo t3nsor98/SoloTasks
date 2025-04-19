@@ -10,6 +10,19 @@ import {
 import { addNotification } from "../store/slices/uiSlice";
 import { updateUserXP } from "../store/slices/userStatsSlice";
 
+// Utility function to serialize dates
+function serializeDates(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj.toDate && typeof obj.toDate === "function")
+    return obj.toDate().toISOString();
+  const result = Array.isArray(obj) ? [] : {};
+  for (const key in obj) {
+    result[key] = serializeDates(obj[key]);
+  }
+  return result;
+}
+
 // List of possible achievements
 export const ACHIEVEMENTS = {
   FIRST_QUEST: {
@@ -167,7 +180,7 @@ export const checkAchievements = async (userId, stats, dispatch) => {
       return [];
     }
 
-    const userData = userSnap.data();
+    const userData = serializeDates(userSnap.data());
     const currentAchievements = userData.achievements || [];
     const newAchievements = [];
 
@@ -298,16 +311,18 @@ export const checkAchievements = async (userId, stats, dispatch) => {
 
       try {
         // Update user document with new achievements and XP
+        // FIXED: Convert Date objects to ISO strings
+        const now = new Date().toISOString();
         await updateDoc(userRef, {
           achievements: arrayUnion(...achievementIds),
           totalXp: increment(totalXpReward),
           xp: increment(totalXpReward),
-          // Add achievement timestamps
+          // Add achievement timestamps with ISO strings
           achievementHistory: arrayUnion(
             ...newAchievements.map((achievement) => ({
               id: achievement.id,
               title: achievement.title,
-              unlockedAt: new Date(),
+              unlockedAt: now,
               xpReward: achievement.xpReward,
             }))
           ),
@@ -379,10 +394,12 @@ export const checkSpecialAchievement = async (userId, data, dispatch) => {
 
         if (!userSnap.exists()) return;
 
-        const userData = userSnap.data();
+        const userData = serializeDates(userSnap.data());
         const currentAchievements = userData.achievements || [];
 
         if (!currentAchievements.includes(ACHIEVEMENTS.SPEED_RUNNER.id)) {
+          // FIXED: Convert Date object to ISO string
+          const now = new Date().toISOString();
           await updateDoc(userRef, {
             achievements: arrayUnion(ACHIEVEMENTS.SPEED_RUNNER.id),
             totalXp: increment(ACHIEVEMENTS.SPEED_RUNNER.xpReward),
@@ -390,7 +407,7 @@ export const checkSpecialAchievement = async (userId, data, dispatch) => {
             achievementHistory: arrayUnion({
               id: ACHIEVEMENTS.SPEED_RUNNER.id,
               title: ACHIEVEMENTS.SPEED_RUNNER.title,
-              unlockedAt: new Date(),
+              unlockedAt: now,
               xpReward: ACHIEVEMENTS.SPEED_RUNNER.xpReward,
             }),
           });
@@ -439,7 +456,7 @@ export const getUserAchievements = async (userId) => {
       }));
     }
 
-    const userData = userSnap.data();
+    const userData = serializeDates(userSnap.data());
     const unlockedAchievements = userData.achievements || [];
 
     return Object.values(ACHIEVEMENTS).map((achievement) => ({

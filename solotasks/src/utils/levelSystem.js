@@ -1,5 +1,7 @@
 // src/utils/levelSystem.js
 
+
+
 /**
  * Calculate XP required for next level
  * @param {number} level - Current level

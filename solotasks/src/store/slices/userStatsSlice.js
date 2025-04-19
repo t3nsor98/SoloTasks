@@ -14,6 +14,22 @@ import { addNotification } from "./uiSlice";
 import { getTitleForLevel } from "../../utils/levelSystem";
 
 /**
+ * Helper function to serialize dates
+ */
+const serializeDates = (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj.toDate && typeof obj.toDate === "function")
+    return obj.toDate().toISOString();
+
+  const result = Array.isArray(obj) ? [] : {};
+  for (const key in obj) {
+    result[key] = serializeDates(obj[key]);
+  }
+  return result;
+};
+
+/**
  * Fetch user stats from Firestore
  */
 export const fetchUserStats = createAsyncThunk(
@@ -24,35 +40,17 @@ export const fetchUserStats = createAsyncThunk(
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
-        const userData = docSnap.data();
+        // Serialize all Firestore data to avoid non-serializable values
+        const userData = serializeDates(docSnap.data());
 
-        // Convert Firestore timestamps to JS dates
-        const processedData = {
-          ...userData,
-          lastActive: userData.lastActive
-            ? userData.lastActive.toDate
-              ? userData.lastActive.toDate()
-              : userData.lastActive
-            : null,
-          createdAt: userData.createdAt
-            ? userData.createdAt.toDate
-              ? userData.createdAt.toDate()
-              : userData.createdAt
-            : null,
-          lastLogin: userData.lastLogin
-            ? userData.lastLogin.toDate
-              ? userData.lastLogin.toDate()
-              : userData.lastLogin
-            : null,
-        };
-
-        // Update last active time
+        // Update last active time with ISO string
+        const now = new Date().toISOString();
         await updateDoc(docRef, {
-          lastActive: new Date(),
+          lastActive: now,
           serverTimestamp: serverTimestamp(),
         });
 
-        return processedData;
+        return userData;
       } else {
         return thunkAPI.rejectWithValue("User stats not found");
       }
@@ -83,7 +81,7 @@ export const updateUserXP = createAsyncThunk(
         return thunkAPI.rejectWithValue("User not found");
       }
 
-      const userData = userSnap.data();
+      const userData = serializeDates(userSnap.data());
       const currentXP = userData.xp || 0;
       const currentLevel = userData.level || 1;
       const totalXP = (userData.totalXp || 0) + xpToAdd;
@@ -110,12 +108,15 @@ export const updateUserXP = createAsyncThunk(
         }
       }
 
+      // Current time as ISO string
+      const now = new Date().toISOString();
+
       // Prepare update data
       const updateData = {
         xp: newXP,
         level: newLevel,
         totalXp: totalXP,
-        lastActive: new Date(),
+        lastActive: now,
         serverTimestamp: serverTimestamp(),
       };
 
@@ -144,7 +145,7 @@ export const updateUserXP = createAsyncThunk(
       updateData.xpHistory = arrayUnion({
         amount: xpToAdd,
         source: questType || "other",
-        timestamp: new Date(),
+        timestamp: now,
         newTotal: totalXP,
       });
 
@@ -227,10 +228,10 @@ export const updateUserStreak = createAsyncThunk(
         return thunkAPI.rejectWithValue("User not found");
       }
 
-      const userData = userSnap.data();
+      const userData = serializeDates(userSnap.data());
       const currentStreak = userData.streak || 0;
       const lastActive = userData.lastActive
-        ? userData.lastActive.toDate()
+        ? new Date(userData.lastActive)
         : null;
 
       // Calculate if streak should be updated
@@ -268,13 +269,14 @@ export const updateUserStreak = createAsyncThunk(
       }
 
       if (streakUpdated) {
+        const nowIso = now.toISOString();
         await updateDoc(userRef, {
           streak: newStreak,
-          lastActive: now,
+          lastActive: nowIso,
           serverTimestamp: serverTimestamp(),
           streakHistory: arrayUnion({
             streak: newStreak,
-            date: now,
+            date: nowIso,
           }),
         });
 
@@ -340,9 +342,10 @@ export const updateUserTitle = createAsyncThunk(
         return thunkAPI.rejectWithValue("Title not unlocked");
       }
 
+      const now = new Date().toISOString();
       await updateDoc(userRef, {
         currentTitle: title,
-        lastUpdated: new Date(),
+        lastUpdated: now,
         serverTimestamp: serverTimestamp(),
       });
 
@@ -364,6 +367,7 @@ export const resetUserStats = createAsyncThunk(
   async (userId, thunkAPI) => {
     try {
       const userRef = doc(db, "users", userId);
+      const now = new Date().toISOString();
 
       await updateDoc(userRef, {
         level: 1,
@@ -376,7 +380,7 @@ export const resetUserStats = createAsyncThunk(
         completedDungeons: 0,
         titles: ["Novice Hunter"],
         currentTitle: "Novice Hunter",
-        lastReset: new Date(),
+        lastReset: now,
         serverTimestamp: serverTimestamp(),
       });
 

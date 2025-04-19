@@ -17,8 +17,25 @@ import {
   getDoc,
   updateDoc,
   serverTimestamp,
+  arrayUnion,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+/**
+ * Helper function to serialize dates
+ */
+const serializeDates = (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj.toDate && typeof obj.toDate === "function")
+    return obj.toDate().toISOString();
+
+  const result = Array.isArray(obj) ? [] : {};
+  for (const key in obj) {
+    result[key] = serializeDates(obj[key]);
+  }
+  return result;
+};
 
 /**
  * Register a new user
@@ -38,7 +55,7 @@ export const registerUser = createAsyncThunk(
       // Default profile data
       const defaultTitles = ["Novice Hunter"];
       const defaultTitle = "Novice Hunter";
-      const creationTime = new Date();
+      const creationTime = new Date().toISOString(); // Use ISO string for Firestore compatibility
 
       // Create initial user profile in Firestore
       await setDoc(doc(db, "users", user.uid), {
@@ -107,22 +124,27 @@ export const loginUser = createAsyncThunk(
       const userDoc = await getDoc(userRef);
 
       if (userDoc.exists()) {
-        const userData = userDoc.data();
+        // Serialize the Firestore data to avoid non-serializable values
+        const userData = serializeDates(userDoc.data());
+
+        // Current time as ISO string
+        const now = new Date().toISOString();
 
         // Update last login time
         await updateDoc(userRef, {
-          lastLogin: new Date(),
-          lastActive: new Date(),
+          lastLogin: now,
+          lastActive: now,
           serverTimestamp: serverTimestamp(),
         });
 
         // Check and update streak
+        // Note: We need to parse the ISO string back to Date for date comparison
         const lastActive = userData.lastActive
-          ? userData.lastActive.toDate()
+          ? new Date(userData.lastActive)
           : null;
         if (lastActive) {
-          const now = new Date();
-          const yesterday = new Date(now);
+          const nowDate = new Date();
+          const yesterday = new Date(nowDate);
           yesterday.setDate(yesterday.getDate() - 1);
 
           // If last active was yesterday, continue streak
@@ -130,7 +152,7 @@ export const loginUser = createAsyncThunk(
           // Otherwise, reset streak to 1
           if (
             lastActive.toDateString() === yesterday.toDateString() ||
-            lastActive.toDateString() === now.toDateString()
+            lastActive.toDateString() === nowDate.toDateString()
           ) {
             // Streak continues or maintains
           } else {
@@ -182,7 +204,7 @@ export const logoutUser = createAsyncThunk(
       if (currentUser) {
         const userRef = doc(db, "users", currentUser.uid);
         await updateDoc(userRef, {
-          lastActive: new Date(),
+          lastActive: new Date().toISOString(), // Use ISO string
           serverTimestamp: serverTimestamp(),
         });
       }
@@ -213,12 +235,13 @@ export const updateUserProfile = createAsyncThunk(
         updateData.profileImageUrl = imageUrl;
       }
 
-      // Update timestamp
-      updateData.lastUpdated = new Date();
+      // Update timestamp as ISO string
+      updateData.lastUpdated = new Date().toISOString();
 
       await updateDoc(userRef, updateData);
 
-      return updateData;
+      // Return serialized data to avoid non-serializable values
+      return serializeDates(updateData);
     } catch (error) {
       return thunkAPI.rejectWithValue(
         error.message || "Failed to update profile"
@@ -274,11 +297,11 @@ export const updateUserEmail = createAsyncThunk(
       // Update email in Firebase Auth
       await updateEmail(user, newEmail);
 
-      // Update email in Firestore
+      // Update email in Firestore with ISO string date
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
         email: newEmail,
-        lastUpdated: new Date(),
+        lastUpdated: new Date().toISOString(),
       });
 
       return { email: newEmail };
@@ -324,11 +347,12 @@ export const updateUserPassword = createAsyncThunk(
       // Update password
       await updatePassword(user, newPassword);
 
-      // Update last updated timestamp in Firestore
+      // Update last updated timestamp in Firestore using ISO string
+      const now = new Date().toISOString();
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
-        passwordUpdatedAt: new Date(),
-        lastUpdated: new Date(),
+        passwordUpdatedAt: now,
+        lastUpdated: now,
       });
 
       return { success: true };
@@ -361,12 +385,14 @@ const authSlice = createSlice({
   },
   reducers: {
     setUser: (state, action) => {
-      state.user = action.payload;
+      // Ensure any date objects in the payload are serialized
+      state.user = action.payload ? serializeDates(action.payload) : null;
       state.isLoading = false;
     },
     updateProfile: (state, action) => {
       if (state.user) {
-        state.user = { ...state.user, ...action.payload };
+        // Ensure any date objects in the payload are serialized
+        state.user = { ...state.user, ...serializeDates(action.payload) };
       }
     },
     clearAuthError: (state) => {
